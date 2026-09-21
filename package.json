@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "description": "AI Native Task & Thought Board (WHITEBOARD) with MCP & Realtime SSE",
+  "workspaces": [
+    "server",
+    "client"
+  ],
   "scripts": {
     "dev": "npm run build && cd server && npm start",
-    "build": "npm run build:client && npm run build:server",
+    "build": "npm run install:all && npm run build:client && npm run build:server",
+    "install:all": "npm install && (cd client && npm install) && (cd server && npm install)",
     "build:server": "cd server && npm run build",
     "build:client": "cd client && npm run build",
     "start": "cd server && npm start",
