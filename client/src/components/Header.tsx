@@ -12,6 +12,8 @@ import {
   Radio,
   MoreVertical,
   Tag,
+  Download,
+  Upload,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -27,6 +29,8 @@ interface HeaderProps {
   onToggleDark: () => void;
   onOpenAgentSim: () => void;
   onResetBoard: () => void;
+  onExportBackup: () => void;
+  onImportBackup: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onOpenLegend: () => void;
   onNewTask: () => void;
   isSSEConnected: boolean;
@@ -45,11 +49,14 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleDark,
   onOpenAgentSim,
   onResetBoard,
+  onExportBackup,
+  onImportBackup,
   onOpenLegend,
   onNewTask,
   isSSEConnected,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   return (
     <header className="glass-panel sticky top-2 z-30 mx-2 sm:mx-4 my-2 sm:my-3 rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2 shadow-md border border-white/60 dark:border-slate-700/60">
@@ -145,9 +152,25 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
+          onClick={onExportBackup}
+          className="p-1.5 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="バックアップ保存 (JSONダウンロード)"
+        >
+          <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        </button>
+
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="p-1.5 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="バックアップ復元 (JSON読み込み)"
+        >
+          <Upload className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+        </button>
+
+        <button
           onClick={onResetBoard}
           className="p-1.5 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          title="リセット"
+          title="リセット（全タスク消去）"
         >
           <RotateCcw className="w-4 h-4" />
         </button>
@@ -171,6 +194,18 @@ export const Header: React.FC<HeaderProps> = ({
           <span>{isSSEConnected ? '同期中' : 'オフライン'}</span>
         </div>
       </div>
+
+      {/* Hidden File Input for JSON Restore */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={(e) => {
+          onImportBackup(e);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }}
+        accept=".json,application/json"
+        className="hidden"
+      />
 
       {/* Right: Mobile Action Buttons */}
       <div className="flex items-center gap-1.5">
@@ -208,7 +243,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="fixed inset-0 z-40"
                 onClick={() => setIsMobileMenuOpen(false)}
               />
-              <div className="absolute right-0 mt-2 w-48 rounded-2xl glass-panel shadow-2xl border border-white/80 dark:border-slate-700 py-2 z-50 text-xs space-y-1">
+              <div className="absolute right-0 mt-2 w-52 rounded-2xl glass-panel shadow-2xl border border-white/80 dark:border-slate-700 py-2 z-50 text-xs space-y-1">
                 <button
                   onClick={() => {
                     onToggleDark();
@@ -244,6 +279,28 @@ export const Header: React.FC<HeaderProps> = ({
 
                 <button
                   onClick={() => {
+                    onExportBackup();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-emerald-600 dark:text-emerald-400"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>バックアップ保存 (JSON)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-blue-600 dark:text-blue-400"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>バックアップ読込 (JSON)</span>
+                </button>
+
+                <button
+                  onClick={() => {
                     onOpenLegend();
                     setIsMobileMenuOpen(false);
                   }}
@@ -261,7 +318,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-rose-600 dark:text-rose-400 border-t border-slate-100 dark:border-slate-800 pt-2"
                 >
                   <RotateCcw className="w-4 h-4" />
-                  <span>ボードをリセット</span>
+                  <span>ボードをリセット (全消去)</span>
                 </button>
               </div>
             </>

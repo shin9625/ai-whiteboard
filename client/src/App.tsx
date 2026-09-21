@@ -13,10 +13,8 @@ import { NewTaskModal } from './components/NewTaskModal';
 export function App() {
   const [lanes, setLanes] = useState<Lane[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  // Only auto-open drawer on desktop
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => {
-    return typeof window !== 'undefined' && window.innerWidth >= 768 ? 'task-1' : null;
-  });
+  // Empty initial selection (no demo task selected)
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
 
   const [activeView, setActiveView] = useState<'board' | 'bookmarks'>('board');
@@ -44,7 +42,9 @@ export function App() {
   const [isAgentSimOpen, setIsAgentSimOpen] = useState(false);
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
 
-  // Load initial data
+  const STORAGE_KEY = 'ai_whiteboard_backup_v1';
+
+  // Load initial data with Render auto-restore & LocalStorage backup
   const loadData = useCallback(async () => {
     try {
       const [lanesData, tasksData] = await Promise.all([
@@ -52,7 +52,34 @@ export function App() {
         api.fetchTasks(),
       ]);
       setLanes(lanesData);
+
+      // Render再起動対策: サーバー上のタスクが0件だが、ブラウザLocalStorageにデータが存在する場合
+      if (tasksData.length === 0) {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.tasks && parsed.tasks.length > 0) {
+              console.log('🔄 Renderサーバー再起動を検知: ローカル保存データから自動復元中...');
+              await api.syncBoardData(parsed);
+              const restoredTasks = await api.fetchTasks();
+              setTasks(restoredTasks);
+              return;
+            }
+          } catch (e) {
+            console.error('LocalStorage復元エラー:', e);
+          }
+        }
+      }
+
       setTasks(tasksData);
+
+      // サーバーにデータがある場合は、LocalStorageに自動保存
+      if (tasksData.length > 0) {
+        api.exportBoardData().then((fullData) => {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(fullData));
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('Failed to load initial data:', err);
     }
@@ -188,14 +215,52 @@ export function App() {
   };
 
   const handleResetBoard = async () => {
-    if (!confirm('ボードを初期状態（画像と同じデモデータ）にリセットしますか？')) return;
+    if (!confirm('ボードをリセットして全てのタスクと付箋を消去しますか？\n（空の初期状態に戻ります）')) return;
     try {
       await api.resetBoard();
-      setSelectedTaskId('task-1');
-      loadData();
-      loadTaskDetail('task-1');
+      localStorage.removeItem(STORAGE_KEY);
+      setSelectedTaskId(null);
+      setSelectedTaskDetail(null);
+      await loadData();
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleExportBackup = async () => {
+    try {
+      const data = await api.exportBoardData();
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(data, null, 2))}`;
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', jsonString);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      downloadAnchor.setAttribute('download', `ai-whiteboard-backup-${dateStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err: any) {
+      alert('バックアップの保存に失敗しました: ' + err.message);
+    }
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.tasks || !Array.isArray(data.tasks)) {
+        throw new Error('無効なバックアップファイル形式です（tasksが見つかりません）');
+      }
+      if (!confirm(`バックアップからタスク ${data.tasks.length} 件を復元しますか？\n現在のボードは上書きされます。`)) {
+        return;
+      }
+      await api.syncBoardData(data);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      await loadData();
+      alert('バックアップから正常に復元しました！');
+    } catch (err: any) {
+      alert('復元エラー: ' + err.message);
     }
   };
 
@@ -223,7 +288,11 @@ export function App() {
         icon: 'alert',
       });
     } else if (actionType === 'add_agent_note') {
-      const targetId = selectedTaskId || 'task-1';
+      const targetId = selectedTaskId || tasks[0]?.id;
+      if (!targetId) {
+        alert('先にタスクを1つ以上追加してください。');
+        return;
+      }
       await api.addStickyNote(
         targetId,
         'エージェント作業ログ: ベンチマーク測定完了。レイテンシ15%削減を確認。次のステップに進みます。',
@@ -231,7 +300,11 @@ export function App() {
         'エージェント'
       );
     } else if (actionType === 'complete_task') {
-      const targetId = selectedTaskId || 'task-1';
+      const targetId = selectedTaskId || tasks[0]?.id;
+      if (!targetId) {
+        alert('先にタスクを1つ以上追加してください。');
+        return;
+      }
       const task = tasks.find((t) => t.id === targetId);
       await api.moveTaskLane(targetId, 'completed', 1, task?.version);
     }
@@ -275,6 +348,8 @@ export function App() {
         onToggleDark={() => setIsDark((prev) => !prev)}
         onOpenAgentSim={() => setIsAgentSimOpen(true)}
         onResetBoard={handleResetBoard}
+        onExportBackup={handleExportBackup}
+        onImportBackup={handleImportBackup}
         onOpenLegend={() => setIsLegendOpen(true)}
         onNewTask={() => setIsNewTaskOpen(true)}
         isSSEConnected={isSSEConnected}
@@ -319,6 +394,25 @@ export function App() {
           全レーン
         </button>
       </div>
+
+      {/* Empty State Banner */}
+      {tasks.length === 0 && (
+        <div className="mx-2 sm:mx-4 mb-2 p-3 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/80 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-blue-800 dark:text-blue-200 shadow-xs animate-in fade-in duration-300">
+          <div className="flex items-center gap-2 text-center sm:text-left">
+            <span className="text-base">💡</span>
+            <span>
+              <strong>ボードは空です。</strong> 右上の「追加」ボタンから最初のタスクを作成できます。
+              データはブラウザ内に自動バックアップされるため、Renderが再起動しても初期化されません。
+            </span>
+          </div>
+          <button
+            onClick={() => setIsNewTaskOpen(true)}
+            className="flex-shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-xs active:scale-95 transition-all"
+          >
+            ＋ タスクを作成
+          </button>
+        </div>
+      )}
 
       {/* Main Board Area */}
       <main className="flex-1 flex gap-3 px-2 sm:px-4 pb-2 sm:pb-4 overflow-hidden">

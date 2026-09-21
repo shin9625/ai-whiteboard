@@ -115,231 +115,6 @@ export class DatabaseManager {
         [lane.id, lane.name, lane.order_index, lane.description]
       );
     }
-
-    const now = new Date().toISOString();
-
-    const sampleTasks = [
-      {
-        id: 'task-1',
-        title: 'whiteboard: whiteboard-api の骨格を作る (Phase 1)',
-        lane_id: 'in_progress',
-        priority: 1,
-        assignee: 'both',
-        project: 'nuko-whiteboard',
-        tags: JSON.stringify(['whiteboard']),
-        icon: 'doc',
-        is_bookmarked: 1,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-2',
-        title: 'gateway に whiteboard の host 分岐を追加 (Phase 3)',
-        lane_id: 'in_progress',
-        priority: 2,
-        assignee: 'agent',
-        project: 'nuko-whiteboard',
-        tags: JSON.stringify(['gateway', 'infra']),
-        icon: 'code',
-        is_bookmarked: 0,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-3',
-        title: 'モックアップを見て感想を出す',
-        lane_id: 'in_progress',
-        priority: 3,
-        assignee: 'human',
-        project: 'nuko-whiteboard',
-        tags: JSON.stringify(['ui', 'review']),
-        icon: 'chart',
-        is_bookmarked: 0,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-4',
-        title: '1Cat-vLLM(24GB) と ninfer(23.7GB) のDLをどちら先にするか',
-        lane_id: 'need_decision',
-        priority: 1,
-        assignee: 'human',
-        project: 'llm-infra',
-        tags: JSON.stringify(['vllm', 'download']),
-        icon: 'download',
-        is_bookmarked: 1,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-5',
-        title: 'T-D(V100でTTSを動かす検証)をやるか、記録だけ残して捨てるか',
-        lane_id: 'need_decision',
-        priority: 2,
-        assignee: 'human',
-        project: 'audio-model',
-        tags: JSON.stringify(['tts', 'v100']),
-        icon: 'speaker',
-        is_bookmarked: 0,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-6',
-        title: 'A-Uta さん向け計測 (topo / P2P帯域 / x8x8 / TP2実測)',
-        lane_id: 'waiting_agent',
-        priority: 1,
-        assignee: 'agent',
-        project: 'benchmark',
-        tags: JSON.stringify(['gpu', 'p2p']),
-        icon: 'chart',
-        is_bookmarked: 1,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-7',
-        title: 'V-B1: 1Cat-vLLM の venv(py3.12) + wheel v1.5.0 導入',
-        lane_id: 'waiting_agent',
-        priority: 2,
-        assignee: 'agent',
-        project: 'llm-infra',
-        tags: JSON.stringify(['setup', 'python']),
-        icon: 'download',
-        is_bookmarked: 0,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-8',
-        title: 'grug-27b-v2 のMTP を split tensor で検証 (V-D)',
-        lane_id: 'on_hold',
-        priority: 1,
-        assignee: 'both',
-        project: 'llm-research',
-        tags: JSON.stringify(['tensor']),
-        icon: 'cpu',
-        is_bookmarked: 0,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-9',
-        title: 'ninfer-v100 の追試 (219 tok/s の再現確認)',
-        lane_id: 'on_hold',
-        priority: 2,
-        assignee: 'agent',
-        project: 'llm-research',
-        tags: JSON.stringify(['benchmark']),
-        icon: 'chart',
-        is_bookmarked: 1,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-10',
-        title: 'TP2専用の自作テンソル交換カーネル (V-E)',
-        lane_id: 'on_hold',
-        priority: 3,
-        assignee: 'both',
-        project: 'cuda-kernel',
-        tags: JSON.stringify(['kernel', 'cuda']),
-        icon: 'code',
-        is_bookmarked: 0,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-11',
-        title: 'LLKVApprox (nowokay) のメモを 1ページに (V-F)',
-        lane_id: 'on_hold',
-        priority: 4,
-        assignee: 'both',
-        project: 'notes',
-        tags: JSON.stringify(['summary']),
-        icon: 'doc',
-        is_bookmarked: 1,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-12',
-        title: '1Cat の NVFP4 モデルDL (V-B2)',
-        lane_id: 'on_hold',
-        priority: 6,
-        assignee: 'agent',
-        project: 'llm-infra',
-        tags: JSON.stringify(['download', 'fp4']),
-        icon: 'alert',
-        is_bookmarked: 0,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        id: 'task-13',
-        title: 'tduka-api の復旧',
-        lane_id: 'completed',
-        priority: 1,
-        assignee: 'both',
-        project: 'maintenance',
-        tags: JSON.stringify(['api', 'fix']),
-        icon: 'check',
-        is_bookmarked: 0,
-        version: 1,
-        created_at: now,
-        updated_at: now,
-      },
-    ];
-
-    for (const t of sampleTasks) {
-      this.db.run(
-        `INSERT INTO tasks (id, title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [t.id, t.title, t.lane_id, t.priority, t.assignee, t.project, t.tags, t.icon, t.is_bookmarked, t.version, t.created_at, t.updated_at]
-      );
-    }
-
-    // Sample notes for task-1
-    const sampleNotes = [
-      {
-        id: 'note-1',
-        task_id: 'task-1',
-        author: 'agent',
-        author_name: 'エージェント',
-        content: 'X230 の :8086 に新サービス。node:sqlite（ネイティブ部品を使わない）で作る。',
-        created_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-        updated_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'note-2',
-        task_id: 'task-1',
-        author: 'agent',
-        author_name: 'エージェント',
-        content: 'レーン6本 / SSE / 楽観ロックは設計確定。付箋は1枚ずつ編集・削除できる形にする。',
-        created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-        updated_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-      }
-    ];
-
-    for (const n of sampleNotes) {
-      this.db.run(
-        `INSERT INTO notes (id, task_id, author, author_name, content, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [n.id, n.task_id, n.author, n.author_name, n.content, n.created_at, n.updated_at]
-      );
-    }
   }
 
   // --- Read Operations ---
@@ -656,6 +431,105 @@ export class DatabaseManager {
     this.db.run(`DELETE FROM lanes`);
     this.createSchema();
     this.seedInitialData();
+    this.saveToFile();
+  }
+
+  // --- Export & Sync/Restore ---
+  getAllData(): { tasks: Task[]; notes: StickyNote[]; history: TaskHistory[]; lanes: Lane[] } {
+    if (!this.db) return { tasks: [], notes: [], history: [], lanes: [] };
+    const lanes = this.getLanes();
+    const tasks = this.getTasks();
+
+    const notesRes = this.db.exec(`SELECT id, task_id, author, author_name, content, created_at, updated_at FROM notes ORDER BY created_at ASC`);
+    const notes: StickyNote[] = notesRes.length
+      ? notesRes[0].values.map((row) => ({
+          id: row[0] as string,
+          task_id: row[1] as string,
+          author: row[2] as any,
+          author_name: row[3] as string,
+          content: row[4] as string,
+          created_at: row[5] as string,
+          updated_at: row[6] as string,
+        }))
+      : [];
+
+    const histRes = this.db.exec(`SELECT id, task_id, action, actor, detail, created_at FROM history ORDER BY created_at ASC`);
+    const history: TaskHistory[] = histRes.length
+      ? histRes[0].values.map((row) => ({
+          id: row[0] as string,
+          task_id: row[1] as string,
+          action: row[2] as string,
+          actor: row[3] as any,
+          detail: row[4] as string,
+          created_at: row[5] as string,
+        }))
+      : [];
+
+    return { tasks, notes, history, lanes };
+  }
+
+  restoreAllData(data: { tasks?: Task[]; notes?: StickyNote[]; history?: TaskHistory[] }): void {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Clear existing tasks, notes, history
+    this.db.run(`DELETE FROM notes`);
+    this.db.run(`DELETE FROM history`);
+    this.db.run(`DELETE FROM tasks`);
+
+    const now = new Date().toISOString();
+
+    if (data.tasks && Array.isArray(data.tasks)) {
+      for (const t of data.tasks) {
+        const tags = Array.isArray(t.tags) ? JSON.stringify(t.tags) : '[]';
+        this.db.run(
+          `INSERT INTO tasks (id, title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            t.id,
+            t.title,
+            t.lane_id || 'in_progress',
+            t.priority || 1,
+            t.assignee || 'both',
+            t.project || '',
+            tags,
+            t.icon || 'doc',
+            t.is_bookmarked ? 1 : 0,
+            t.version || 1,
+            t.created_at || now,
+            t.updated_at || now,
+          ]
+        );
+      }
+    }
+
+    if (data.notes && Array.isArray(data.notes)) {
+      for (const n of data.notes) {
+        this.db.run(
+          `INSERT INTO notes (id, task_id, author, author_name, content, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            n.id,
+            n.task_id,
+            n.author || 'human',
+            n.author_name || (n.author === 'agent' ? 'エージェント' : 'ユーザー'),
+            n.content || '',
+            n.created_at || now,
+            n.updated_at || now,
+          ]
+        );
+      }
+    }
+
+    if (data.history && Array.isArray(data.history)) {
+      for (const h of data.history) {
+        this.db.run(
+          `INSERT INTO history (id, task_id, action, actor, detail, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [h.id, h.task_id, h.action, h.actor, h.detail, h.created_at || now]
+        );
+      }
+    }
+
     this.saveToFile();
   }
 }

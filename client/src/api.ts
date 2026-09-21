@@ -115,3 +115,21 @@ export async function resetBoard(): Promise<void> {
   const res = await fetch(`${API_BASE}/board/reset`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to reset board');
 }
+
+export async function exportBoardData(): Promise<{ tasks: Task[]; notes: StickyNote[]; history: any[]; lanes: Lane[] }> {
+  const res = await fetch(`${API_BASE}/board/export`);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to export board data');
+  return json.data;
+}
+
+export async function syncBoardData(data: { tasks?: Task[]; notes?: StickyNote[]; history?: any[] }): Promise<void> {
+  const res = await fetch(`${API_BASE}/board/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to sync board data');
+}
+

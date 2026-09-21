@@ -168,3 +168,25 @@ apiRouter.post('/board/reset', (_req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// Export Board Data (Backup)
+apiRouter.get('/board/export', (_req: Request, res: Response) => {
+  try {
+    const data = dbManager.getAllData();
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Sync / Restore Board Data (from LocalStorage or JSON Import)
+apiRouter.post('/board/sync', (req: Request, res: Response) => {
+  try {
+    const { tasks, notes, history } = req.body;
+    dbManager.restoreAllData({ tasks, notes, history });
+    sseManager.broadcast('board_reset', {});
+    res.json({ success: true, message: 'Board data synced successfully' });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
