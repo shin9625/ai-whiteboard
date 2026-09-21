@@ -73,10 +73,43 @@ export type BoardEventType =
   | 'note_added'
   | 'note_updated'
   | 'note_deleted'
-  | 'board_reset';
+  | 'board_reset'
+  | 'agent_action_started'
+  | 'agent_action_completed'
+  | 'agent_usage_updated';
 
 export interface BoardEvent {
   type: BoardEventType;
   timestamp: string;
   payload: any;
 }
+
+export interface ModelUsageRecord {
+  id: string;
+  timestamp: string;
+  model: string;
+  task_id: string;
+  task_title: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  status: 'success' | 'error';
+  error_message?: string;
+}
+
+export interface ModelUsageStats {
+  model_name: string;
+  is_api_key_configured: boolean;
+  daily_limit: number;
+  today_requests: number;
+  today_input_tokens: number;
+  today_output_tokens: number;
+  today_total_tokens: number;
+  today_cost_usd: number;
+  today_cost_jpy: number;
+  all_time_requests: number;
+  all_time_tokens: number;
+  recent_logs: ModelUsageRecord[];
+}
+

@@ -1,4 +1,4 @@
-import { Lane, Task, TaskDetail, StickyNote } from './types';
+import { Lane, Task, TaskDetail, StickyNote, ModelUsageStats } from './types';
 
 const API_BASE = '/api';
 
@@ -132,4 +132,21 @@ export async function syncBoardData(data: { tasks?: Task[]; notes?: StickyNote[]
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || 'Failed to sync board data');
 }
+
+export async function fetchModelUsage(): Promise<ModelUsageStats> {
+  const res = await fetch(`${API_BASE}/agent/usage`);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to fetch model usage stats');
+  return json.data;
+}
+
+export async function triggerAgentTask(taskId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/agent/trigger/${taskId}`, {
+    method: 'POST',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to trigger agent task');
+  return json;
+}
+
 

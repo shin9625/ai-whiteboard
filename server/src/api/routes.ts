@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { dbManager } from '../db/database.js';
 import { sseManager } from './sse.js';
+import { geminiAgent } from '../services/geminiAgent.js';
 
 export const apiRouter = Router();
 
@@ -63,6 +64,12 @@ apiRouter.post('/tasks', (req: Request, res: Response) => {
       actor: 'human',
     });
     sseManager.broadcast('task_created', task);
+
+    // Auto-trigger Gemini autonomous agent if lane is waiting_agent or assignee is agent
+    if (task.lane_id === 'waiting_agent' || task.assignee === 'agent') {
+      setTimeout(() => geminiAgent.processTask(task.id), 400);
+    }
+
     res.status(201).json({ success: true, data: task });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });
@@ -89,6 +96,12 @@ apiRouter.put('/tasks/:id', (req: Request, res: Response) => {
       'human'
     );
     sseManager.broadcast('task_updated', task);
+
+    // Auto-trigger Gemini if moved to waiting_agent
+    if (task.lane_id === 'waiting_agent') {
+      setTimeout(() => geminiAgent.processTask(task.id), 400);
+    }
+
     res.json({ success: true, data: task });
   } catch (err: any) {
     const isConflict = err.message.includes('楽観的ロック競合');
@@ -107,6 +120,12 @@ apiRouter.post('/tasks/:id/move', (req: Request, res: Response) => {
       'human'
     );
     sseManager.broadcast('task_moved', task);
+
+    // Auto-trigger Gemini if moved to waiting_agent
+    if (task.lane_id === 'waiting_agent') {
+      setTimeout(() => geminiAgent.processTask(task.id), 400);
+    }
+
     res.json({ success: true, data: task });
   } catch (err: any) {
     const isConflict = err.message.includes('楽観的ロック競合');
@@ -188,5 +207,25 @@ apiRouter.post('/board/sync', (req: Request, res: Response) => {
     res.json({ success: true, message: 'Board data synced successfully' });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Gemini Agent Usage Stats
+apiRouter.get('/agent/usage', (_req: Request, res: Response) => {
+  try {
+    const stats = dbManager.getModelUsageStats();
+    res.json({ success: true, data: stats });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Manual Agent Trigger
+apiRouter.post('/agent/trigger/:id', async (req: Request, res: Response) => {
+  try {
+    const result = await geminiAgent.processTask(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -14,6 +14,8 @@ import {
   Check,
   Edit2,
   Trash2,
+  Bot,
+  Loader2,
 } from 'lucide-react';
 
 interface TaskDetailDrawerProps {
@@ -25,6 +27,7 @@ interface TaskDetailDrawerProps {
   onUpdateNote: (noteId: string, content: string) => Promise<void>;
   onDeleteNote: (noteId: string) => Promise<void>;
   onTriggerAgent: (task: TaskDetail) => void;
+  onRunGemini?: (taskId: string) => Promise<void>;
 }
 
 type TabType = 'notes' | 'files' | 'html' | 'project_hub' | 'history';
@@ -38,10 +41,12 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   onUpdateNote,
   onDeleteNote,
   onTriggerAgent,
+  onRunGemini,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('notes');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
+  const [isRunningGemini, setIsRunningGemini] = useState(false);
 
   useEffect(() => {
     if (taskDetail) {
@@ -330,18 +335,41 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
       </div>
 
       {/* Bottom Action Footer */}
-      <div className="pt-3 mt-auto border-t border-slate-200/60 dark:border-slate-700/60 flex items-center gap-2">
+      <div className="pt-3 mt-auto border-t border-slate-200/60 dark:border-slate-700/60 flex flex-col sm:flex-row items-center gap-2">
+        {onRunGemini && (
+          <button
+            disabled={isRunningGemini}
+            onClick={async () => {
+              setIsRunningGemini(true);
+              try {
+                await onRunGemini(taskDetail.id);
+              } finally {
+                setIsRunningGemini(false);
+              }
+            }}
+            className="w-full sm:flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-bold rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {isRunningGemini ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Bot className="w-3.5 h-3.5 text-amber-300" />
+            )}
+            <span>{isRunningGemini ? 'Geminiが思考中…' : 'Geminiで自動実行'}</span>
+          </button>
+        )}
+
         <button
           onClick={() => onTriggerAgent(taskDetail)}
-          className="flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md active:scale-95 transition-all"
+          className="w-full sm:w-auto flex items-center justify-center gap-1.5 py-2 px-2.5 text-xs font-medium rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 transition-all cursor-pointer"
+          title="外部AI貼り付け用プロンプトをコピー"
         >
-          <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-          <span>エージェントに依頼</span>
+          <Zap className="w-3.5 h-3.5 text-amber-500" />
+          <span>指示をコピー</span>
         </button>
 
         <button
           onClick={() => onDeleteTask(taskDetail.id)}
-          className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+          className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors self-end sm:self-center cursor-pointer"
           title="タスクを削除"
         >
           <Trash2 className="w-4 h-4" />

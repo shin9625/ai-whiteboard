@@ -12,3 +12,7 @@ server/dist/
 
 # Local database file (auto-generated on first run)
 data/whiteboard.sqlite
+
+# Local agent config (contains private auth credentials)
+.agents/
+

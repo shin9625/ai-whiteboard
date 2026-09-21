@@ -1,7 +1,7 @@
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
-import { Task, StickyNote, TaskHistory, Lane, LaneId, TaskDetail } from '../types.js';
+import { Task, StickyNote, TaskHistory, Lane, LaneId, TaskDetail, ModelUsageRecord, ModelUsageStats } from '../types.js';
 
 function getProjectDataDir(): string {
   if (process.env.DATA_DIR) return path.resolve(process.env.DATA_DIR);
@@ -93,6 +93,20 @@ export class DatabaseManager {
         detail TEXT NOT NULL,
         created_at TEXT NOT NULL,
         FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS model_usage (
+        id TEXT PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        model TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        task_title TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL,
+        error_message TEXT
       );
     `);
   }
@@ -532,6 +546,138 @@ export class DatabaseManager {
 
     this.saveToFile();
   }
+
+  // --- Model Usage & Monitoring ---
+  recordModelUsage(usage: Omit<ModelUsageRecord, 'id' | 'timestamp'>): ModelUsageRecord {
+    if (!this.db) throw new Error('Database not initialized');
+    const id = `usage-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
+
+    this.db.run(
+      `INSERT INTO model_usage (id, timestamp, model, task_id, task_title, input_tokens, output_tokens, total_tokens, estimated_cost_usd, status, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        now,
+        usage.model,
+        usage.task_id,
+        usage.task_title,
+        usage.input_tokens,
+        usage.output_tokens,
+        usage.total_tokens,
+        usage.estimated_cost_usd,
+        usage.status,
+        usage.error_message || null,
+      ]
+    );
+
+    this.saveToFile();
+    return {
+      id,
+      timestamp: now,
+      ...usage,
+    };
+  }
+
+  getModelUsageStats(): ModelUsageStats {
+    const isApiKeyConfigured = Boolean(process.env.GEMINI_API_KEY);
+    const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    const dailyLimit = 1500; // Free Tier limit for Gemini 1.5 Flash (1,500 RPD)
+
+    if (!this.db) {
+      return {
+        model_name: modelName,
+        is_api_key_configured: isApiKeyConfigured,
+        daily_limit: dailyLimit,
+        today_requests: 0,
+        today_input_tokens: 0,
+        today_output_tokens: 0,
+        today_total_tokens: 0,
+        today_cost_usd: 0,
+        today_cost_jpy: 0,
+        all_time_requests: 0,
+        all_time_tokens: 0,
+        recent_logs: [],
+      };
+    }
+
+    // Today's start in UTC/ISO
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayIso = todayStart.toISOString();
+
+    // Today's stats
+    const todayRes = this.db.exec(
+      `SELECT COUNT(*), COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(estimated_cost_usd), 0)
+       FROM model_usage WHERE timestamp >= ?`,
+      [todayIso]
+    );
+
+    let todayRequests = 0;
+    let todayInputTokens = 0;
+    let todayOutputTokens = 0;
+    let todayTotalTokens = 0;
+    let todayCostUsd = 0;
+
+    if (todayRes.length && todayRes[0].values.length) {
+      const row = todayRes[0].values[0];
+      todayRequests = Number(row[0]) || 0;
+      todayInputTokens = Number(row[1]) || 0;
+      todayOutputTokens = Number(row[2]) || 0;
+      todayTotalTokens = Number(row[3]) || 0;
+      todayCostUsd = Number(row[4]) || 0;
+    }
+
+    // All-time stats
+    const allRes = this.db.exec(
+      `SELECT COUNT(*), COALESCE(SUM(total_tokens), 0) FROM model_usage`
+    );
+    let allTimeRequests = 0;
+    let allTimeTokens = 0;
+    if (allRes.length && allRes[0].values.length) {
+      const row = allRes[0].values[0];
+      allTimeRequests = Number(row[0]) || 0;
+      allTimeTokens = Number(row[1]) || 0;
+    }
+
+    // Recent logs (latest 15)
+    const logsRes = this.db.exec(
+      `SELECT id, timestamp, model, task_id, task_title, input_tokens, output_tokens, total_tokens, estimated_cost_usd, status, error_message
+       FROM model_usage ORDER BY timestamp DESC LIMIT 15`
+    );
+
+    const recentLogs: ModelUsageRecord[] = logsRes.length
+      ? logsRes[0].values.map((v) => ({
+          id: v[0] as string,
+          timestamp: v[1] as string,
+          model: v[2] as string,
+          task_id: v[3] as string,
+          task_title: v[4] as string,
+          input_tokens: Number(v[5]),
+          output_tokens: Number(v[6]),
+          total_tokens: Number(v[7]),
+          estimated_cost_usd: Number(v[8]),
+          status: v[9] as any,
+          error_message: v[10] ? (v[10] as string) : undefined,
+        }))
+      : [];
+
+    return {
+      model_name: modelName,
+      is_api_key_configured: isApiKeyConfigured,
+      daily_limit: dailyLimit,
+      today_requests: todayRequests,
+      today_input_tokens: todayInputTokens,
+      today_output_tokens: todayOutputTokens,
+      today_total_tokens: todayTotalTokens,
+      today_cost_usd: Number(todayCostUsd.toFixed(6)),
+      today_cost_jpy: Number((todayCostUsd * 155).toFixed(4)),
+      all_time_requests: allTimeRequests,
+      all_time_tokens: allTimeTokens,
+      recent_logs: recentLogs,
+    };
+  }
 }
 
 export const dbManager = new DatabaseManager();
+

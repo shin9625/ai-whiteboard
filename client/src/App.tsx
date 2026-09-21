@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Lane, Task, TaskDetail } from './types';
+import { Lane, Task, TaskDetail, ModelUsageStats } from './types';
 import * as api from './api';
 import { useSSE } from './hooks/useSSE';
 import { Header } from './components/Header';
@@ -8,6 +8,7 @@ import { TaskDetailDrawer } from './components/TaskDetailDrawer';
 import { SearchModal } from './components/SearchModal';
 import { LegendModal } from './components/LegendModal';
 import { AgentSimModal } from './components/AgentSimModal';
+import { AgentUsageModal } from './components/AgentUsageModal';
 import { NewTaskModal } from './components/NewTaskModal';
 
 export function App() {
@@ -16,6 +17,7 @@ export function App() {
   // Empty initial selection (no demo task selected)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
+  const [usageStats, setUsageStats] = useState<ModelUsageStats | null>(null);
 
   const [activeView, setActiveView] = useState<'board' | 'bookmarks'>('board');
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,9 +42,20 @@ export function App() {
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [isAgentSimOpen, setIsAgentSimOpen] = useState(false);
+  const [isAgentUsageOpen, setIsAgentUsageOpen] = useState(false);
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
 
   const STORAGE_KEY = 'ai_whiteboard_backup_v1';
+
+  // Load Model Usage Stats
+  const loadUsageStats = useCallback(async () => {
+    try {
+      const stats = await api.fetchModelUsage();
+      setUsageStats(stats);
+    } catch (err) {
+      console.error('Failed to load model usage stats:', err);
+    }
+  }, []);
 
   // Load initial data with Render auto-restore & LocalStorage backup
   const loadData = useCallback(async () => {
@@ -87,7 +100,8 @@ export function App() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadUsageStats();
+  }, [loadData, loadUsageStats]);
 
   // Load Task Detail when selectedTaskId changes
   const loadTaskDetail = useCallback(async (id: string) => {
@@ -111,13 +125,14 @@ export function App() {
   const handleBoardEvent = useCallback(
     (event: any) => {
       console.log('📡 SSE Event Received:', event.type, event.payload);
-      // Reload tasks and detail if current
+      // Reload tasks, usage stats and detail if current
       loadData();
+      loadUsageStats();
       if (selectedTaskId) {
         loadTaskDetail(selectedTaskId);
       }
     },
-    [loadData, selectedTaskId, loadTaskDetail]
+    [loadData, loadUsageStats, selectedTaskId, loadTaskDetail]
   );
 
   const { isConnected: isSSEConnected } = useSSE(handleBoardEvent);
@@ -132,6 +147,7 @@ export function App() {
         setIsSearchModalOpen(false);
         setIsLegendOpen(false);
         setIsAgentSimOpen(false);
+        setIsAgentUsageOpen(false);
         setIsNewTaskOpen(false);
       }
     };
@@ -318,6 +334,21 @@ export function App() {
     alert(`エージェントへの依頼プロンプトをクリップボードにコピーしました！\n\n「${prompt}」\n\nAntigravityなどのAIチャットに貼り付けて実行してください。`);
   };
 
+  const handleRunGeminiTask = async (taskId: string) => {
+    try {
+      const res = await api.triggerAgentTask(taskId);
+      if (!res.success) {
+        alert(res.message || 'Geminiの実行に失敗しました');
+      }
+      await Promise.all([loadData(), loadUsageStats()]);
+      if (selectedTaskId === taskId) {
+        loadTaskDetail(taskId);
+      }
+    } catch (err: any) {
+      alert('エラー: ' + err.message);
+    }
+  };
+
   // Filter tasks by view and search query
   const filteredTasks = tasks.filter((t) => {
     if (activeView === 'bookmarks' && !t.is_bookmarked) return false;
@@ -346,7 +377,9 @@ export function App() {
         onToggleTags={() => setShowTags((prev) => !prev)}
         isDark={isDark}
         onToggleDark={() => setIsDark((prev) => !prev)}
-        onOpenAgentSim={() => setIsAgentSimOpen(true)}
+        onOpenAgentUsage={() => setIsAgentUsageOpen(true)}
+        todayUsageRequests={usageStats?.today_requests}
+        isApiKeyConfigured={usageStats?.is_api_key_configured}
         onResetBoard={handleResetBoard}
         onExportBackup={handleExportBackup}
         onImportBackup={handleImportBackup}
@@ -427,6 +460,7 @@ export function App() {
             onUpdateNote={handleUpdateNote}
             onDeleteNote={handleDeleteNote}
             onTriggerAgent={handleTriggerAgent}
+            onRunGemini={handleRunGeminiTask}
           />
         )}
 
@@ -466,6 +500,13 @@ export function App() {
       <LegendModal
         isOpen={isLegendOpen}
         onClose={() => setIsLegendOpen(false)}
+      />
+
+      <AgentUsageModal
+        isOpen={isAgentUsageOpen}
+        onClose={() => setIsAgentUsageOpen(false)}
+        stats={usageStats}
+        onRefresh={loadUsageStats}
       />
 
       <AgentSimModal
