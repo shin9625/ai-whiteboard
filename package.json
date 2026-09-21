@@ -1,0 +1,17 @@
+{
+  "name": "ai-whiteboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Native Task & Thought Board (WHITEBOARD) with MCP & Realtime SSE",
+  "scripts": {
+    "dev": "npm run build && cd server && npm start",
+    "build": "npm run build:client && npm run build:server",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "mcp": "cd server && npm run mcp"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

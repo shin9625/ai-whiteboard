@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+server/dist/
+# client/dist is included so it can run immediately without build, or we can build it via npm run build
+# client/dist/
+
+# Local database file (auto-generated on first run)
+data/whiteboard.sqlite
