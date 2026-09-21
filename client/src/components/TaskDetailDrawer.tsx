@@ -70,7 +70,13 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   };
 
   return (
-    <div className="w-[380px] lg:w-[420px] flex-shrink-0 glass-panel rounded-2xl p-4 flex flex-col h-[calc(100vh-130px)] shadow-xl border border-white/60 dark:border-slate-700/60 transition-all duration-300">
+    <>
+      {/* Mobile Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs md:hidden"
+        onClick={onClose}
+      />
+      <div className="fixed inset-x-2 bottom-2 top-16 md:static md:w-[380px] lg:w-[420px] z-50 md:z-auto flex-shrink-0 glass-panel rounded-2xl p-4 flex flex-col h-[calc(100vh-80px)] md:h-[calc(100vh-130px)] shadow-2xl md:shadow-xl border border-white/80 dark:border-slate-700/80 transition-all duration-300">
       {/* Top Header */}
       <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
         <div className="flex items-start gap-2.5 flex-1 min-w-0">
@@ -342,5 +348,6 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
         </button>
       </div>
     </div>
+    </>
   );
 };

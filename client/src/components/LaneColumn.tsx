@@ -99,7 +99,7 @@ export const LaneColumn: React.FC<LaneColumnProps> = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`glass-panel rounded-2xl p-3 flex flex-col min-w-[280px] max-w-[340px] flex-1 h-[calc(100vh-130px)] transition-all duration-200 ${
+      className={`glass-panel rounded-2xl p-3 flex flex-col w-full md:min-w-[280px] md:max-w-[340px] flex-1 h-[calc(100vh-140px)] md:h-[calc(100vh-130px)] transition-all duration-200 ${
         isOver
           ? 'ring-2 ring-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
           : ''

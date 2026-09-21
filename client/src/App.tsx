@@ -13,13 +13,30 @@ import { NewTaskModal } from './components/NewTaskModal';
 export function App() {
   const [lanes, setLanes] = useState<Lane[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>('task-1');
+  // Only auto-open drawer on desktop
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => {
+    return typeof window !== 'undefined' && window.innerWidth >= 768 ? 'task-1' : null;
+  });
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
 
   const [activeView, setActiveView] = useState<'board' | 'bookmarks'>('board');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTags, setShowTags] = useState(true);
   const [isDark, setIsDark] = useState(false);
+
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    return typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  });
+  const [activeMobileLane, setActiveMobileLane] = useState<string>('in_progress');
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Modals
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -263,9 +280,49 @@ export function App() {
         isSSEConnected={isSSEConnected}
       />
 
+      {/* Mobile Lane Selector Bar (md:hidden) */}
+      <div className="md:hidden px-2 pb-2 overflow-x-auto flex items-center gap-1.5 scrollbar-none">
+        {lanes.map((lane) => {
+          const count = filteredTasks.filter((t) => t.lane_id === lane.id).length;
+          const isActive = activeMobileLane === lane.id;
+          return (
+            <button
+              key={lane.id}
+              onClick={() => setActiveMobileLane(lane.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60'
+              }`}
+            >
+              <span>{lane.name}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  isActive
+                    ? 'bg-blue-700 text-white'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setActiveMobileLane('all')}
+          className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            activeMobileLane === 'all'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'bg-white/80 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60'
+          }`}
+        >
+          全レーン
+        </button>
+      </div>
+
       {/* Main Board Area */}
-      <main className="flex-1 flex gap-3 px-4 pb-4 overflow-hidden">
-        {/* Left: Task Detail Drawer (if selected) */}
+      <main className="flex-1 flex gap-3 px-2 sm:px-4 pb-2 sm:pb-4 overflow-hidden">
+        {/* Task Detail Drawer */}
         {selectedTaskDetail && (
           <TaskDetailDrawer
             taskDetail={selectedTaskDetail}
@@ -279,22 +336,28 @@ export function App() {
           />
         )}
 
-        {/* Right: Kanban Columns (Horizontal Scrollable) */}
-        <div className="flex-1 flex gap-3 overflow-x-auto pb-2 items-start">
-          {lanes.map((lane) => {
-            const laneTasks = filteredTasks.filter((t) => t.lane_id === lane.id);
-            return (
-              <LaneColumn
-                key={lane.id}
-                lane={lane}
-                tasks={laneTasks}
-                selectedTaskId={selectedTaskId}
-                showTags={showTags}
-                onSelectTask={(task) => setSelectedTaskId(task.id)}
-                onTaskDrop={handleTaskDrop}
-              />
-            );
-          })}
+        {/* Kanban Columns (Single lane on mobile unless 'all', all lanes on desktop) */}
+        <div className="flex-1 flex gap-3 overflow-x-auto pb-2 items-start w-full">
+          {lanes
+            .filter((lane) => {
+              if (!isMobile) return true;
+              if (activeMobileLane === 'all') return true;
+              return lane.id === activeMobileLane;
+            })
+            .map((lane) => {
+              const laneTasks = filteredTasks.filter((t) => t.lane_id === lane.id);
+              return (
+                <LaneColumn
+                  key={lane.id}
+                  lane={lane}
+                  tasks={laneTasks}
+                  selectedTaskId={selectedTaskId}
+                  showTags={showTags}
+                  onSelectTask={(task) => setSelectedTaskId(task.id)}
+                  onTaskDrop={handleTaskDrop}
+                />
+              );
+            })}
         </div>
       </main>
 
