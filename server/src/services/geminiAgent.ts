@@ -11,10 +11,71 @@ interface GeminiAgentResponse {
 
 export class GeminiAgentService {
   private isProcessingTask: Map<string, boolean> = new Map();
+  private cachedWorkingModel: string | null = null;
+
+  async getAvailableModels(apiKey: string): Promise<string[]> {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      if (!data.models || !Array.isArray(data.models)) return [];
+
+      return data.models
+        .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+        .map((m: any) => m.name.replace(/^models\//, ''));
+    } catch (e) {
+      console.error('Failed to list Gemini models:', e);
+      return [];
+    }
+  }
+
+  async resolveModel(apiKey: string): Promise<string> {
+    if (process.env.GEMINI_MODEL) {
+      return process.env.GEMINI_MODEL.replace(/^models\//, '');
+    }
+    if (this.cachedWorkingModel) {
+      return this.cachedWorkingModel;
+    }
+
+    const available = await this.getAvailableModels(apiKey);
+    console.log('📋 Available Gemini models for this key:', available);
+
+    // Prioritize latest Flash models
+    const preferred = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-1.5-flash-002',
+      'gemini-1.5-flash-001',
+      'gemini-1.5-flash',
+      'gemini-2.0-flash-exp',
+    ];
+
+    for (const pref of preferred) {
+      if (available.includes(pref)) {
+        console.log(`✨ Selected preferred Gemini model: ${pref}`);
+        this.cachedWorkingModel = pref;
+        return pref;
+      }
+    }
+
+    // Any model containing 'flash'
+    const anyFlash = available.find((m) => m.includes('flash'));
+    if (anyFlash) {
+      console.log(`✨ Selected flash Gemini model: ${anyFlash}`);
+      this.cachedWorkingModel = anyFlash;
+      return anyFlash;
+    }
+
+    // Fallback to first available model or gemini-2.5-flash
+    const fallback = available[0] || 'gemini-2.5-flash';
+    console.log(`✨ Selected fallback Gemini model: ${fallback}`);
+    this.cachedWorkingModel = fallback;
+    return fallback;
+  }
 
   async processTask(taskId: string): Promise<{ success: boolean; message: string; data?: any }> {
     const apiKey = process.env.GEMINI_API_KEY;
-    const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
     if (!apiKey) {
       console.log('⚠️ GEMINI_API_KEY is not set. Skipping autonomous agent execution.');
@@ -35,6 +96,9 @@ export class GeminiAgentService {
     }
 
     this.isProcessingTask.set(taskId, true);
+
+    // Automatically resolve working model for this API key
+    let model = await this.resolveModel(apiKey);
 
     // Notify clients that agent started thinking
     sseManager.broadcast('agent_action_started', {
@@ -92,12 +156,29 @@ ${notesHistory || '（まだ付箋はありません）'}
         },
       };
 
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const response = await fetch(apiUrl, {
+      let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      let response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       });
+
+      // If 404, clear cached model, re-fetch available models and retry with first available
+      if (response.status === 404) {
+        console.warn(`Model ${model} returned 404. Attempting automatic model resolution and retry...`);
+        this.cachedWorkingModel = null;
+        const available = await this.getAvailableModels(apiKey);
+        if (available.length > 0 && available[0] !== model) {
+          model = available[0];
+          console.log(`Retrying with auto-discovered model: ${model}`);
+          apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+          });
+        }
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -144,7 +225,7 @@ ${notesHistory || '（まだ付箋はありません）'}
 
       // 1. Add sticky note
       const noteContent = parsed.sticky_note || 'タスクを確認しました。';
-      const newNote = dbManager.addNote(task.id, noteContent, 'agent', 'Gemini 1.5 Flash');
+      const newNote = dbManager.addNote(task.id, noteContent, 'agent', `Gemini (${model})`);
       sseManager.broadcast('note_added', newNote);
 
       // 2. Move lane if changed
