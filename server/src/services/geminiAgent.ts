@@ -42,7 +42,13 @@ export class GeminiAgentService {
       return data.models
         .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
         .map((m: any) => m.name.replace(/^models\//, ''))
-        .filter((name: string) => !DISALLOWED_MODELS.has(name));
+        .filter((name: string) => 
+          !DISALLOWED_MODELS.has(name) &&
+          !name.includes('tts') &&
+          !name.includes('audio') &&
+          !name.includes('image') &&
+          !name.includes('embedding')
+        );
     } catch (e) {
       console.error('Failed to list Gemini models:', e);
       return [];
@@ -174,13 +180,32 @@ ${notesHistory || '（まだメッセージはありません）'}
         const suggestedMatch = errorText.match(/use models\/([a-zA-Z0-9.-]+)/i);
         let retryModel: string | null = suggestedMatch ? suggestedMatch[1] : null;
 
+        if (
+          retryModel &&
+          (retryModel.includes('tts') ||
+            retryModel.includes('audio') ||
+            retryModel.includes('embedding') ||
+            retryModel.includes('image'))
+        ) {
+          console.warn(`Suggested model ${retryModel} is non-text. Ignoring suggestion.`);
+          retryModel = null;
+        }
+
         if (retryModel) {
           console.log(`💡 Detected recommended model from Google API error message: ${retryModel}`);
         } else {
           // If no explicit "use models/", check other models mentioned that are not the failing model and not disallowed
           const mentionedModels = Array.from(errorText.matchAll(/models\/([a-zA-Z0-9.-]+)/gi))
             .map((m) => m[1])
-            .filter((m) => m !== model && !DISALLOWED_MODELS.has(m));
+            .filter(
+              (m) =>
+                m !== model &&
+                !DISALLOWED_MODELS.has(m) &&
+                !m.includes('tts') &&
+                !m.includes('audio') &&
+                !m.includes('embedding') &&
+                !m.includes('image')
+            );
 
           if (mentionedModels.length > 0) {
             retryModel = mentionedModels[0];
@@ -196,6 +221,19 @@ ${notesHistory || '（まだメッセージはありません）'}
             }
           }
         }
+
+        // Record initial failure in usage stats for transparency
+        dbManager.recordModelUsage({
+          model,
+          task_id: task.id,
+          task_title: task.title,
+          input_tokens: 0,
+          output_tokens: 0,
+          total_tokens: 0,
+          estimated_cost_usd: 0,
+          status: 'error',
+          error_message: `Attempt failed (${response.status}): ${errorText.substring(0, 150)}`,
+        });
 
         if (retryModel && retryModel !== model) {
           console.log(`🔄 Automatically retrying with model: ${retryModel}`);

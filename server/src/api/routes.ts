@@ -6,13 +6,32 @@ import { groqAgentService } from '../services/groqAgent.js';
 
 export const apiRouter = Router();
 
-// Dispatch to preferred AI agent
+// Dispatch to preferred AI agent with automatic cross-provider fallback
 const dispatchAIAgent = async (taskId: string, provider?: string) => {
   const chosen = provider || process.env.DEFAULT_AI_PROVIDER || (process.env.GROQ_API_KEY ? 'groq' : 'gemini');
-  if (chosen === 'groq' && process.env.GROQ_API_KEY) {
-    return await groqAgentService.processTask(taskId);
+  
+  if (chosen === 'groq') {
+    if (process.env.GROQ_API_KEY) {
+      const groqRes = await groqAgentService.processTask(taskId);
+      if (groqRes.success || !process.env.GEMINI_API_KEY) {
+        return groqRes;
+      }
+      console.warn(`Groq execution failed (${groqRes.message}), falling back to Gemini...`);
+    }
+    return await geminiAgent.processTask(taskId);
+  } else {
+    if (process.env.GEMINI_API_KEY) {
+      const geminiRes = await geminiAgent.processTask(taskId);
+      if (geminiRes.success || !process.env.GROQ_API_KEY) {
+        return geminiRes;
+      }
+      console.warn(`Gemini execution failed (${geminiRes.message}), falling back to Groq Llama 3.3...`);
+    }
+    if (process.env.GROQ_API_KEY) {
+      return await groqAgentService.processTask(taskId);
+    }
+    return await geminiAgent.processTask(taskId);
   }
-  return await geminiAgent.processTask(taskId);
 };
 
 // SSE Stream
