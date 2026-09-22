@@ -581,8 +581,8 @@ export class DatabaseManager {
 
   getModelUsageStats(): ModelUsageStats {
     const isApiKeyConfigured = Boolean(process.env.GEMINI_API_KEY);
-    const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-    const dailyLimit = 1500; // Free Tier limit for Gemini 1.5 Flash (1,500 RPD)
+    const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    const dailyLimit = 1500; // Free Tier limit for Gemini Flash (1,500 RPD)
 
     if (!this.db) {
       return {

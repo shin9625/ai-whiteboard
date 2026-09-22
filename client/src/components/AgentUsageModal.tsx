@@ -48,7 +48,7 @@ export const AgentUsageModal: React.FC<AgentUsageModalProps> = ({
               <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <span>Gemini 自律エージェント & 利用状況</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  {stats?.model_name || 'gemini-1.5-flash'}
+                  {stats?.model_name || 'gemini-3.6-flash'}
                 </span>
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -239,7 +239,7 @@ export const AgentUsageModal: React.FC<AgentUsageModalProps> = ({
         {/* Footer */}
         <div className="px-5 py-3 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
           <div className="text-[10px] text-slate-400">
-            モデル: {stats?.model_name || 'gemini-1.5-flash'} | Free Tier 1,500 RPD
+            モデル: {stats?.model_name || 'gemini-3.6-flash'} | Free Tier 1,500 RPD
           </div>
           <button
             onClick={onClose}

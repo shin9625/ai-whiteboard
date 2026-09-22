@@ -42,6 +42,11 @@ export class GeminiAgentService {
 
     // Prioritize latest Flash models
     const preferred = [
+      'gemini-3.6-flash',
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.5-flash',
+      'gemini-3-flash',
       'gemini-2.5-flash',
       'gemini-2.0-flash',
       'gemini-1.5-flash-latest',
@@ -67,8 +72,8 @@ export class GeminiAgentService {
       return anyFlash;
     }
 
-    // Fallback to first available model or gemini-2.5-flash
-    const fallback = available[0] || 'gemini-2.5-flash';
+    // Fallback to first available model or gemini-3.6-flash
+    const fallback = available[0] || 'gemini-3.6-flash';
     console.log(`✨ Selected fallback Gemini model: ${fallback}`);
     this.cachedWorkingModel = fallback;
     return fallback;
@@ -163,26 +168,46 @@ ${notesHistory || '（まだ付箋はありません）'}
         body: JSON.stringify(requestBody),
       });
 
-      // If 404, clear cached model, re-fetch available models and retry with first available
-      if (response.status === 404) {
-        console.warn(`Model ${model} returned 404. Attempting automatic model resolution and retry...`);
-        this.cachedWorkingModel = null;
-        const available = await this.getAvailableModels(apiKey);
-        if (available.length > 0 && available[0] !== model) {
-          model = available[0];
-          console.log(`Retrying with auto-discovered model: ${model}`);
+      // Handle 404 or model errors with smart auto-retry and Google suggestion parsing
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`Gemini API returned ${response.status} for model ${model}: ${errorText}`);
+
+        // Try to extract suggested model from Google's error message (e.g. "use models/gemini-3.6-flash")
+        const suggestedMatch = errorText.match(/models\/(gemini-[a-zA-Z0-9.-]+)/i);
+        const suggestedModel = suggestedMatch ? suggestedMatch[1] : null;
+
+        let retryModel: string | null = null;
+        if (suggestedModel && suggestedModel !== model) {
+          retryModel = suggestedModel;
+          console.log(`💡 Detected recommended model from Gemini API error: ${retryModel}`);
+        } else {
+          // Clear cache, fetch available and try an alternate model
+          this.cachedWorkingModel = null;
+          const available = await this.getAvailableModels(apiKey);
+          const alternate = available.find((m) => m !== model);
+          if (alternate) {
+            retryModel = alternate;
+          }
+        }
+
+        if (retryModel) {
+          console.log(`🔄 Automatically retrying with model: ${retryModel}`);
+          model = retryModel;
+          this.cachedWorkingModel = retryModel;
           apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
           response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody),
           });
+          if (!response.ok) {
+            const retryErrorText = await response.text();
+            throw new Error(`Gemini API error after retry (${response.status}): ${retryErrorText}`);
+          }
+        } else {
+          throw new Error(`Gemini API error (${response.status}): ${errorText}`);
         }
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gemini API error (${response.status}): ${errorText}`);
       }
 
       const resJson: any = await response.json();
