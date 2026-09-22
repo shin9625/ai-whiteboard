@@ -7,6 +7,12 @@ interface GeminiAgentResponse {
   sticky_note: string;
   next_lane: LaneId;
   action_summary: string;
+  html_content?: string;
+  artifacts?: {
+    name: string;
+    language: string;
+    content: string;
+  }[];
 }
 
 const DISALLOWED_MODELS = new Set([
@@ -97,21 +103,34 @@ export class GeminiAgentService {
         .join('\n');
 
       const systemInstruction = `あなたはAIネイティブタスク・思考管理ボード「WHITEBOARD」の自律型エージェント（${model}）です。
-ユーザーが作成・指定したタスクを受け取り、実質的な初動調査・分析・アドバイス・質問を行い、カンバン上の付箋メモを作成してください。
+ユーザーが作成・指定したタスクを受け取り、実質的な初動調査・分析・アドバイス・開発を行い、チャットメッセージと必要に応じた成果物（HTMLアプリやコード）を作成してください。
 
 【出力フォーマット】
 以下のJSONフォーマットのみを出力してください（Markdownコードブロックは不要、純粋なJSON文字列のみ）：
 {
   "thought": "タスクの目的と、あなたが何を行うべきかの思考プロセス（1〜2文）",
-  "sticky_note": "ホワイトボードに貼る付箋メモ本文。実用的で具体的、かつ箇条書きなどを交えて読みやすく。最大300文字。",
+  "sticky_note": "チャット相手への返信メッセージ本文。実用的で具体的、かつ箇条書きなどを交えて読みやすく。成果物（HTMLやコード）を作成した場合はその説明も含めてください。",
   "next_lane": "次にタスクを移動させるべきレーンID ('need_decision' | 'completed' | 'in_progress')",
-  "action_summary": "実行したアクションの短い要約（例: 初動計画の策定、調査完了、承認待ち）"
+  "action_summary": "実行したアクションの短い要約（例: Markdownエディタ開発、調査完了、承認待ち）",
+  "html_content": "ブラウザで実際に動作する完全なシングルファイルWebアプリケーション（<!DOCTYPE html>から</html>まで。Tailwind CSSのCDNを含め、美しくインタラクティブに動くもの）。制作・開発依頼でない場合は空文字 \"\"",
+  "artifacts": [
+    {
+      "name": "ファイル名（例: App.tsx, script.py, editor.html）",
+      "language": "言語（例: typescript, python, html, javascript）",
+      "content": "完全なソースコード"
+    }
+  ]
 }
 
+【成果物（コード・HTML）の作成ルール】
+- タスク名や会話履歴に「〜を作って」「コード」「アプリ」「UI」「HTML」「ツール」「エディタ」などの作成・開発依頼がある場合、必ず "html_content" にブラウザ上で実際に触って動く完全なHTML/JSコードを生成してください。
+- "artifacts" にも主要なソースコードファイルを格納してください。
+- 単なる相談や方針伺いの場合は、"html_content" は空文字 ""、"artifacts" は [] で構いません。
+
 【レーン選択の基準】
-- 'need_decision' (あなたの判断待ち): 人間に選択肢から選んでほしい時、承認や詳細な方針決定が必要な時。
-- 'completed' (完了): タスクの質問や依頼がこの1回の回答で完全に解決・達成された時。
-- 'in_progress' (進行中): 引き続き作業を進める必要がある時、または着手メモの時。`;
+- 'need_decision' (あなたの判断待ち): 人間に選択肢から選んでほしい時、承認や方針決定が必要な時。
+- 'completed' (完了): タスクの質問やアプリ作成が完了し、動作確認できる状態になった時。
+- 'in_progress' (進行中): 引き続き作業を進める必要がある時。`;
 
       const userPrompt = `【対象タスク】
 ID: ${task.id}
@@ -121,10 +140,10 @@ ID: ${task.id}
 プロジェクト: ${task.project || 'なし'}
 タグ: ${task.tags.join(', ') || 'なし'}
 
-【これまでの付箋メモ履歴】
-${notesHistory || '（まだ付箋はありません）'}
+【これまでのチャット・対話履歴】
+${notesHistory || '（まだメッセージはありません）'}
 
-このタスクに対して初動の自律アクションを実行し、JSONで回答してください。`;
+このタスクに対して自律アクションを実行し、JSONで回答してください。`;
 
       const requestBody = {
         contents: [
@@ -205,7 +224,7 @@ ${notesHistory || '（まだ付箋はありません）'}
       const outputTokens = Number(usageMeta.candidatesTokenCount) || 0;
       const totalTokens = Number(usageMeta.totalTokenCount) || inputTokens + outputTokens;
 
-      // Pricing: Gemini 1.5 Flash ($0.075 / 1M in, $0.30 / 1M out)
+      // Pricing: Gemini Flash ($0.075 / 1M in, $0.30 / 1M out)
       const inputCost = (inputTokens / 1_000_000) * 0.075;
       const outputCost = (outputTokens / 1_000_000) * 0.30;
       const estimatedCostUsd = inputCost + outputCost;
@@ -235,7 +254,17 @@ ${notesHistory || '（まだ付箋はありません）'}
         status: 'success',
       });
 
-      // 1. Add sticky note
+      // 0. Update artifacts / HTML if generated
+      if (parsed.html_content || (parsed.artifacts && parsed.artifacts.length > 0)) {
+        dbManager.updateTaskArtifacts(
+          task.id,
+          parsed.html_content || undefined,
+          parsed.artifacts || undefined,
+          'agent'
+        );
+      }
+
+      // 1. Add sticky note / chat message
       const noteContent = parsed.sticky_note || 'タスクを確認しました。';
       const newNote = dbManager.addNote(task.id, noteContent, 'agent', `Gemini (${model})`);
       sseManager.broadcast('note_added', newNote);
@@ -245,6 +274,11 @@ ${notesHistory || '（まだ付箋はありません）'}
       if (targetLane !== task.lane_id) {
         const updatedTask = dbManager.updateTask(task.id, { lane_id: targetLane }, undefined, 'agent');
         sseManager.broadcast('task_moved', updatedTask);
+      } else {
+        const currentTask = dbManager.getTaskDetail(task.id);
+        if (currentTask) {
+          sseManager.broadcast('task_updated', currentTask);
+        }
       }
 
       // 3. Notify completion & update usage stats

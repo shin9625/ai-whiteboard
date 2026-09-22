@@ -140,13 +140,31 @@ export async function fetchModelUsage(): Promise<ModelUsageStats> {
   return json.data;
 }
 
-export async function triggerAgentTask(taskId: string): Promise<any> {
+export async function triggerAgentTask(taskId: string, provider?: 'gemini' | 'groq'): Promise<any> {
   const res = await fetch(`${API_BASE}/agent/trigger/${taskId}`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider }),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || 'Failed to trigger agent task');
   return json;
+}
+
+export async function sendChatMessage(
+  taskId: string,
+  content: string,
+  triggerAi = true,
+  provider?: 'gemini' | 'groq'
+): Promise<StickyNote> {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, trigger_ai: triggerAi, provider }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to send chat message');
+  return json.data;
 }
 
 

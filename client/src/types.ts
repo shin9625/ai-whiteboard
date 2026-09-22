@@ -25,6 +25,12 @@ export type TaskIcon =
   | 'check'
   | 'cpu';
 
+export interface ArtifactFile {
+  name: string;
+  language: string;
+  content: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -36,6 +42,8 @@ export interface Task {
   icon: TaskIcon;
   is_bookmarked: boolean;
   version: number;
+  html_content?: string;
+  artifacts?: ArtifactFile[];
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +70,8 @@ export interface TaskHistory {
 export interface TaskDetail extends Task {
   notes: StickyNote[];
   history: TaskHistory[];
+  html_content?: string;
+  artifacts?: ArtifactFile[];
 }
 
 export type BoardEventType =

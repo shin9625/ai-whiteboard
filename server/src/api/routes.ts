@@ -2,8 +2,18 @@ import { Router, Request, Response } from 'express';
 import { dbManager } from '../db/database.js';
 import { sseManager } from './sse.js';
 import { geminiAgent } from '../services/geminiAgent.js';
+import { groqAgentService } from '../services/groqAgent.js';
 
 export const apiRouter = Router();
+
+// Dispatch to preferred AI agent
+const dispatchAIAgent = async (taskId: string, provider?: string) => {
+  const chosen = provider || process.env.DEFAULT_AI_PROVIDER || (process.env.GROQ_API_KEY ? 'groq' : 'gemini');
+  if (chosen === 'groq' && process.env.GROQ_API_KEY) {
+    return await groqAgentService.processTask(taskId);
+  }
+  return await geminiAgent.processTask(taskId);
+};
 
 // SSE Stream
 apiRouter.get('/events', (req: Request, res: Response) => {
@@ -52,22 +62,12 @@ apiRouter.get('/tasks/:id', (req: Request, res: Response) => {
 // Create Task
 apiRouter.post('/tasks', (req: Request, res: Response) => {
   try {
-    const task = dbManager.createTask({
-      title: req.body.title,
-      lane_id: req.body.lane_id,
-      priority: req.body.priority,
-      assignee: req.body.assignee,
-      project: req.body.project,
-      tags: req.body.tags,
-      icon: req.body.icon,
-      is_bookmarked: req.body.is_bookmarked,
-      actor: 'human',
-    });
+    const task = dbManager.createTask(req.body);
     sseManager.broadcast('task_created', task);
 
-    // Auto-trigger Gemini autonomous agent if lane is waiting_agent or assignee is agent
+    // Auto-trigger agent if created in waiting_agent lane or assigned to agent
     if (task.lane_id === 'waiting_agent' || task.assignee === 'agent') {
-      setTimeout(() => geminiAgent.processTask(task.id), 400);
+      setTimeout(() => dispatchAIAgent(task.id), 300);
     }
 
     res.status(201).json({ success: true, data: task });
@@ -79,29 +79,14 @@ apiRouter.post('/tasks', (req: Request, res: Response) => {
 // Update Task (with Optimistic Locking)
 apiRouter.put('/tasks/:id', (req: Request, res: Response) => {
   try {
-    const expectedVersion = req.body.expected_version !== undefined ? Number(req.body.expected_version) : undefined;
+    const { expected_version, ...updates } = req.body;
     const task = dbManager.updateTask(
       req.params.id,
-      {
-        title: req.body.title,
-        lane_id: req.body.lane_id,
-        priority: req.body.priority,
-        assignee: req.body.assignee,
-        project: req.body.project,
-        tags: req.body.tags,
-        icon: req.body.icon,
-        is_bookmarked: req.body.is_bookmarked,
-      },
-      expectedVersion,
+      updates,
+      expected_version !== undefined ? Number(expected_version) : undefined,
       'human'
     );
     sseManager.broadcast('task_updated', task);
-
-    // Auto-trigger Gemini if moved to waiting_agent
-    if (task.lane_id === 'waiting_agent') {
-      setTimeout(() => geminiAgent.processTask(task.id), 400);
-    }
-
     res.json({ success: true, data: task });
   } catch (err: any) {
     const isConflict = err.message.includes('楽観的ロック競合');
@@ -121,9 +106,9 @@ apiRouter.post('/tasks/:id/move', (req: Request, res: Response) => {
     );
     sseManager.broadcast('task_moved', task);
 
-    // Auto-trigger Gemini if moved to waiting_agent
+    // Auto-trigger agent if moved to waiting_agent
     if (task.lane_id === 'waiting_agent') {
-      setTimeout(() => geminiAgent.processTask(task.id), 400);
+      setTimeout(() => dispatchAIAgent(task.id), 400);
     }
 
     res.json({ success: true, data: task });
@@ -220,11 +205,35 @@ apiRouter.get('/agent/usage', (_req: Request, res: Response) => {
   }
 });
 
-// Manual Agent Trigger
+// Manual Agent Trigger (with optional provider: 'gemini' | 'groq')
 apiRouter.post('/agent/trigger/:id', async (req: Request, res: Response) => {
   try {
-    const result = await geminiAgent.processTask(req.params.id);
+    const provider = req.body?.provider || (req.query.provider as string);
+    const result = await dispatchAIAgent(req.params.id, provider);
     res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Post chat message and optionally trigger AI response
+apiRouter.post('/tasks/:id/chat', async (req: Request, res: Response) => {
+  try {
+    const { content, trigger_ai = true, provider } = req.body;
+    if (!content || !content.trim()) {
+      return res.status(400).json({ success: false, error: 'Content is required' });
+    }
+
+    // 1. Add human message
+    const humanNote = dbManager.addNote(req.params.id, content.trim(), 'human', 'あなた');
+    sseManager.broadcast('note_added', humanNote);
+
+    // 2. Trigger AI agent in background if requested
+    if (trigger_ai) {
+      setTimeout(() => dispatchAIAgent(req.params.id, provider), 200);
+    }
+
+    res.status(201).json({ success: true, data: humanNote });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

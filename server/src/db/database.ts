@@ -33,6 +33,15 @@ export class DatabaseManager {
     if (fs.existsSync(DB_PATH)) {
       const fileBuffer = fs.readFileSync(DB_PATH);
       this.db = new this.SQL.Database(fileBuffer);
+      // Run migrations for existing DB
+      if (this.db) {
+        try {
+          this.db.run(`ALTER TABLE tasks ADD COLUMN html_content TEXT DEFAULT ''`);
+        } catch {}
+        try {
+          this.db.run(`ALTER TABLE tasks ADD COLUMN artifacts TEXT DEFAULT '[]'`);
+        } catch {}
+      }
     } else {
       this.db = new this.SQL.Database();
       this.createSchema();
@@ -69,6 +78,8 @@ export class DatabaseManager {
         icon TEXT NOT NULL DEFAULT 'doc',
         is_bookmarked INTEGER NOT NULL DEFAULT 0,
         version INTEGER NOT NULL DEFAULT 1,
+        html_content TEXT DEFAULT '',
+        artifacts TEXT DEFAULT '[]',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (lane_id) REFERENCES lanes(id)
@@ -146,7 +157,7 @@ export class DatabaseManager {
 
   getTasks(filters?: { lane_id?: string; search?: string; project?: string; is_bookmarked?: boolean }): Task[] {
     if (!this.db) return [];
-    let sql = `SELECT id, title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, created_at, updated_at FROM tasks WHERE 1=1`;
+    let sql = `SELECT id, title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, html_content, artifacts, created_at, updated_at FROM tasks WHERE 1=1`;
     const params: any[] = [];
 
     if (filters?.lane_id) {
@@ -182,15 +193,17 @@ export class DatabaseManager {
       icon: v[7] as any,
       is_bookmarked: Boolean(v[8]),
       version: v[9] as number,
-      created_at: v[10] as string,
-      updated_at: v[11] as string,
+      html_content: (v[10] as string) || '',
+      artifacts: JSON.parse((v[11] as string) || '[]'),
+      created_at: v[12] as string,
+      updated_at: v[13] as string,
     }));
   }
 
   getTaskDetail(id: string): TaskDetail | null {
     if (!this.db) return null;
     const res = this.db.exec(
-      `SELECT id, title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, created_at, updated_at FROM tasks WHERE id = ?`,
+      `SELECT id, title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, html_content, artifacts, created_at, updated_at FROM tasks WHERE id = ?`,
       [id]
     );
     if (!res.length || !res[0].values.length) return null;
@@ -206,12 +219,14 @@ export class DatabaseManager {
       icon: v[7] as any,
       is_bookmarked: Boolean(v[8]),
       version: v[9] as number,
-      created_at: v[10] as string,
-      updated_at: v[11] as string,
+      html_content: (v[10] as string) || '',
+      artifacts: JSON.parse((v[11] as string) || '[]'),
+      created_at: v[12] as string,
+      updated_at: v[13] as string,
     };
 
     const notesRes = this.db.exec(
-      `SELECT id, task_id, author, author_name, content, created_at, updated_at FROM notes WHERE task_id = ? ORDER BY created_at DESC`,
+      `SELECT id, task_id, author, author_name, content, created_at, updated_at FROM notes WHERE task_id = ? ORDER BY created_at ASC`,
       [id]
     );
     const notes: StickyNote[] = notesRes.length
@@ -254,6 +269,8 @@ export class DatabaseManager {
     tags?: string[];
     icon?: any;
     is_bookmarked?: boolean;
+    html_content?: string;
+    artifacts?: any[];
     actor?: 'human' | 'agent';
   }): Task {
     if (!this.db) throw new Error('Database not initialized');
@@ -267,11 +284,13 @@ export class DatabaseManager {
     const icon = taskData.icon || 'doc';
     const is_bookmarked = taskData.is_bookmarked ? 1 : 0;
     const version = 1;
+    const html_content = taskData.html_content || '';
+    const artifacts = JSON.stringify(taskData.artifacts || []);
 
     this.db.run(
-      `INSERT INTO tasks (id, title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, taskData.title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, now, now]
+      `INSERT INTO tasks (id, title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, html_content, artifacts, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, taskData.title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, version, html_content, artifacts, now, now]
     );
 
     this.addHistory(id, 'タスク作成', taskData.actor || 'human', `タスク「${taskData.title}」を作成しました`);
@@ -288,6 +307,8 @@ export class DatabaseManager {
       icon,
       is_bookmarked: Boolean(is_bookmarked),
       version,
+      html_content,
+      artifacts: taskData.artifacts || [],
       created_at: now,
       updated_at: now,
     };
@@ -304,6 +325,8 @@ export class DatabaseManager {
       tags: string[];
       icon: any;
       is_bookmarked: boolean;
+      html_content: string;
+      artifacts: any[];
     }>,
     expectedVersion?: number,
     actor: 'human' | 'agent' = 'human'
@@ -329,19 +352,22 @@ export class DatabaseManager {
     const tags = updates.tags !== undefined ? JSON.stringify(updates.tags) : JSON.stringify(current.tags);
     const icon = updates.icon !== undefined ? updates.icon : current.icon;
     const is_bookmarked = updates.is_bookmarked !== undefined ? (updates.is_bookmarked ? 1 : 0) : (current.is_bookmarked ? 1 : 0);
+    const html_content = updates.html_content !== undefined ? updates.html_content : (current.html_content || '');
+    const artifacts = updates.artifacts !== undefined ? JSON.stringify(updates.artifacts) : JSON.stringify(current.artifacts || []);
 
     this.db.run(
       `UPDATE tasks SET
         title = ?, lane_id = ?, priority = ?, assignee = ?, project = ?,
-        tags = ?, icon = ?, is_bookmarked = ?, version = ?, updated_at = ?
+        tags = ?, icon = ?, is_bookmarked = ?, version = ?, html_content = ?, artifacts = ?, updated_at = ?
        WHERE id = ?`,
-      [title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, newVersion, now, id]
+      [title, lane_id, priority, assignee, project, tags, icon, is_bookmarked, newVersion, html_content, artifacts, now, id]
     );
 
     const detailChanges: string[] = [];
     if (updates.lane_id && updates.lane_id !== current.lane_id) detailChanges.push(`レーンを ${updates.lane_id} に移動`);
     if (updates.title && updates.title !== current.title) detailChanges.push(`タイトルを変更`);
     if (updates.assignee && updates.assignee !== current.assignee) detailChanges.push(`担当を ${updates.assignee} に変更`);
+    if (updates.html_content !== undefined) detailChanges.push(`HTML成果物を更新`);
 
     this.addHistory(id, 'タスク更新', actor, detailChanges.length ? detailChanges.join(', ') : 'タスク情報を更新');
     this.saveToFile();
@@ -357,9 +383,31 @@ export class DatabaseManager {
       icon,
       is_bookmarked: Boolean(is_bookmarked),
       version: newVersion,
+      html_content,
+      artifacts: updates.artifacts || current.artifacts || [],
       created_at: current.created_at,
       updated_at: now,
     };
+  }
+
+  updateTaskArtifacts(
+    taskId: string,
+    htmlContent?: string,
+    artifacts?: any[],
+    actor: 'human' | 'agent' = 'agent'
+  ): Task {
+    const current = this.getTaskDetail(taskId);
+    if (!current) throw new Error(`Task ${taskId} not found`);
+
+    return this.updateTask(
+      taskId,
+      {
+        html_content: htmlContent !== undefined ? htmlContent : current.html_content,
+        artifacts: artifacts !== undefined ? artifacts : current.artifacts,
+      },
+      undefined,
+      actor
+    );
   }
 
   deleteTask(id: string, actor: 'human' | 'agent' = 'human'): void {

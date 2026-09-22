@@ -334,11 +334,11 @@ export function App() {
     alert(`エージェントへの依頼プロンプトをクリップボードにコピーしました！\n\n「${prompt}」\n\nAntigravityなどのAIチャットに貼り付けて実行してください。`);
   };
 
-  const handleRunGeminiTask = async (taskId: string) => {
+  const handleRunGeminiTask = async (taskId: string, provider?: 'gemini' | 'groq') => {
     try {
-      const res = await api.triggerAgentTask(taskId);
+      const res = await api.triggerAgentTask(taskId, provider);
       if (!res.success) {
-        alert(res.message || 'Geminiの実行に失敗しました');
+        alert(res.message || 'AIの実行に失敗しました');
       }
       await Promise.all([loadData(), loadUsageStats()]);
       if (selectedTaskId === taskId) {
@@ -346,6 +346,16 @@ export function App() {
       }
     } catch (err: any) {
       alert('エラー: ' + err.message);
+    }
+  };
+
+  const handleSendChatMessage = async (content: string, triggerAi = true, provider?: 'gemini' | 'groq') => {
+    if (!selectedTaskId) return;
+    try {
+      await api.sendChatMessage(selectedTaskId, content, triggerAi, provider);
+      await Promise.all([loadTaskDetail(selectedTaskId), loadData()]);
+    } catch (err: any) {
+      alert('メッセージ送信エラー: ' + err.message);
     }
   };
 
@@ -461,6 +471,7 @@ export function App() {
             onDeleteNote={handleDeleteNote}
             onTriggerAgent={handleTriggerAgent}
             onRunGemini={handleRunGeminiTask}
+            onSendChatMessage={handleSendChatMessage}
           />
         )}
 
