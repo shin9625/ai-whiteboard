@@ -9,6 +9,19 @@ interface GeminiAgentResponse {
   action_summary: string;
 }
 
+const DISALLOWED_MODELS = new Set([
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash-001',
+  'gemini-1.5-flash-002',
+  'gemini-1.5-pro',
+  'gemini-1.5-pro-latest',
+  'gemini-1.0-pro',
+  'gemini-pro',
+]);
+
 export class GeminiAgentService {
   private isProcessingTask: Map<string, boolean> = new Map();
   private cachedWorkingModel: string | null = null;
@@ -22,7 +35,8 @@ export class GeminiAgentService {
 
       return data.models
         .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-        .map((m: any) => m.name.replace(/^models\//, ''));
+        .map((m: any) => m.name.replace(/^models\//, ''))
+        .filter((name: string) => !DISALLOWED_MODELS.has(name));
     } catch (e) {
       console.error('Failed to list Gemini models:', e);
       return [];
@@ -37,23 +51,26 @@ export class GeminiAgentService {
       return this.cachedWorkingModel;
     }
 
-    const available = await this.getAvailableModels(apiKey);
-    console.log('📋 Available Gemini models for this key:', available);
+    // Default to the proven stable working model for new API keys
+    const defaultModel = 'gemini-3.6-flash';
 
-    // Prioritize latest Flash models
+    const available = await this.getAvailableModels(apiKey);
+    console.log('📋 Available allowed Gemini models for this key:', available);
+
+    // If defaultModel is explicitly present in available list, or available list is empty/lacks new models, use defaultModel
+    if (available.includes(defaultModel)) {
+      this.cachedWorkingModel = defaultModel;
+      return defaultModel;
+    }
+
+    // Prioritize latest Flash models (excluding deprecated)
     const preferred = [
       'gemini-3.6-flash',
       'gemini-3.8-flash',
       'gemini-3.7-flash',
       'gemini-3.5-flash',
       'gemini-3-flash',
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash-latest',
-      'gemini-1.5-flash-002',
-      'gemini-1.5-flash-001',
-      'gemini-1.5-flash',
-      'gemini-2.0-flash-exp',
+      'gemini-3.1-pro-preview',
     ];
 
     for (const pref of preferred) {
@@ -64,19 +81,16 @@ export class GeminiAgentService {
       }
     }
 
-    // Any model containing 'flash'
-    const anyFlash = available.find((m) => m.includes('flash'));
-    if (anyFlash) {
-      console.log(`✨ Selected flash Gemini model: ${anyFlash}`);
-      this.cachedWorkingModel = anyFlash;
-      return anyFlash;
+    // Any available non-disallowed model
+    if (available.length > 0) {
+      const selected = available[0];
+      console.log(`✨ Selected allowed Gemini model: ${selected}`);
+      this.cachedWorkingModel = selected;
+      return selected;
     }
 
-    // Fallback to first available model or gemini-3.6-flash
-    const fallback = available[0] || 'gemini-3.6-flash';
-    console.log(`✨ Selected fallback Gemini model: ${fallback}`);
-    this.cachedWorkingModel = fallback;
-    return fallback;
+    this.cachedWorkingModel = defaultModel;
+    return defaultModel;
   }
 
   async processTask(taskId: string): Promise<{ success: boolean; message: string; data?: any }> {
@@ -173,25 +187,34 @@ ${notesHistory || '（まだ付箋はありません）'}
         const errorText = await response.text();
         console.warn(`Gemini API returned ${response.status} for model ${model}: ${errorText}`);
 
-        // Try to extract suggested model from Google's error message (e.g. "use models/gemini-3.6-flash")
-        const suggestedMatch = errorText.match(/models\/(gemini-[a-zA-Z0-9.-]+)/i);
-        const suggestedModel = suggestedMatch ? suggestedMatch[1] : null;
+        // Extract recommended model from Google's error message (specifically targeting "use models/<model>")
+        const suggestedMatch = errorText.match(/use models\/([a-zA-Z0-9.-]+)/i);
+        let retryModel: string | null = suggestedMatch ? suggestedMatch[1] : null;
 
-        let retryModel: string | null = null;
-        if (suggestedModel && suggestedModel !== model) {
-          retryModel = suggestedModel;
-          console.log(`💡 Detected recommended model from Gemini API error: ${retryModel}`);
+        if (retryModel) {
+          console.log(`💡 Detected recommended model from Google API error message: ${retryModel}`);
         } else {
-          // Clear cache, fetch available and try an alternate model
-          this.cachedWorkingModel = null;
-          const available = await this.getAvailableModels(apiKey);
-          const alternate = available.find((m) => m !== model);
-          if (alternate) {
-            retryModel = alternate;
+          // If no explicit "use models/", check other models mentioned that are not the failing model and not disallowed
+          const mentionedModels = Array.from(errorText.matchAll(/models\/([a-zA-Z0-9.-]+)/gi))
+            .map((m) => m[1])
+            .filter((m) => m !== model && !DISALLOWED_MODELS.has(m));
+
+          if (mentionedModels.length > 0) {
+            retryModel = mentionedModels[0];
+          } else {
+            // Clear cache and pick next allowed model
+            this.cachedWorkingModel = null;
+            const available = await this.getAvailableModels(apiKey);
+            const alternate = available.find((m) => m !== model && !DISALLOWED_MODELS.has(m));
+            if (alternate) {
+              retryModel = alternate;
+            } else if (model !== 'gemini-3.6-flash') {
+              retryModel = 'gemini-3.6-flash';
+            }
           }
         }
 
-        if (retryModel) {
+        if (retryModel && retryModel !== model) {
           console.log(`🔄 Automatically retrying with model: ${retryModel}`);
           model = retryModel;
           this.cachedWorkingModel = retryModel;
