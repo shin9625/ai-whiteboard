@@ -43,7 +43,7 @@ export class GeminiAgentService {
     }
   }
 
-  async resolveModel(apiKey: string): Promise<string> {
+  async resolveModel(): Promise<string> {
     if (process.env.GEMINI_MODEL) {
       return process.env.GEMINI_MODEL.replace(/^models\//, '');
     }
@@ -51,44 +51,8 @@ export class GeminiAgentService {
       return this.cachedWorkingModel;
     }
 
-    // Default to the proven stable working model for new API keys
+    // Default to the proven stable working model for new Gemini API keys
     const defaultModel = 'gemini-3.6-flash';
-
-    const available = await this.getAvailableModels(apiKey);
-    console.log('📋 Available allowed Gemini models for this key:', available);
-
-    // If defaultModel is explicitly present in available list, or available list is empty/lacks new models, use defaultModel
-    if (available.includes(defaultModel)) {
-      this.cachedWorkingModel = defaultModel;
-      return defaultModel;
-    }
-
-    // Prioritize latest Flash models (excluding deprecated)
-    const preferred = [
-      'gemini-3.6-flash',
-      'gemini-3.8-flash',
-      'gemini-3.7-flash',
-      'gemini-3.5-flash',
-      'gemini-3-flash',
-      'gemini-3.1-pro-preview',
-    ];
-
-    for (const pref of preferred) {
-      if (available.includes(pref)) {
-        console.log(`✨ Selected preferred Gemini model: ${pref}`);
-        this.cachedWorkingModel = pref;
-        return pref;
-      }
-    }
-
-    // Any available non-disallowed model
-    if (available.length > 0) {
-      const selected = available[0];
-      console.log(`✨ Selected allowed Gemini model: ${selected}`);
-      this.cachedWorkingModel = selected;
-      return selected;
-    }
-
     this.cachedWorkingModel = defaultModel;
     return defaultModel;
   }
@@ -117,7 +81,7 @@ export class GeminiAgentService {
     this.isProcessingTask.set(taskId, true);
 
     // Automatically resolve working model for this API key
-    let model = await this.resolveModel(apiKey);
+    let model = await this.resolveModel();
 
     // Notify clients that agent started thinking
     sseManager.broadcast('agent_action_started', {
